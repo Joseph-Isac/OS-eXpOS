@@ -1,0 +1,15 @@
+int main()
+{
+decl
+	int t,per;
+	str fname;
+enddecl
+begin
+	t=exposcall("Write",-2,"ENTER FILE:");
+	t=exposcall("Read",-1,fname);
+	t=exposcall("Write",-2,"ENTER PERMISSION:");
+	t=exposcall("Read",-1,per);
+	t=exposcall("Create",fname,per);
+	return 0;
+end
+}
