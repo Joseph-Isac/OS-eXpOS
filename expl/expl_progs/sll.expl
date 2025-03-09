@@ -1,0 +1,46 @@
+type 
+sll
+{	int num;
+	sll next;
+}
+endtype
+
+decl
+	sll head;
+enddecl
+
+int main()
+{	
+decl
+	sll p,q;
+	int i,n,temp,a,ele;
+enddecl
+begin
+	a=initialize();
+	temp=exposcall("Read",-1,n);
+	i=0;
+	head=null;
+	while (i<n) do
+		temp=exposcall("Read",-1,ele);
+		p=alloc();
+		p.num=ele;
+		p.next=null;
+		if (head==null) then
+			head=p;
+			q=head;
+		else
+			q.next=p;
+			q=q.next;
+		endif;
+		temp=exposcall("Write",-2,q.num);
+		i=i+1;
+	endwhile;
+	
+	q=head;
+	while (q!=null) do
+		temp=exposcall("Write",-2,q.num);
+		q=q.next;
+	endwhile;
+	return 0;
+end
+}

@@ -1,0 +1,23 @@
+int main()
+{
+decl
+	int t,fd,a,n,s;
+	str fname;
+enddecl
+begin
+	fd=exposcall("Open","root");
+	n=0;
+	while (n<60) do
+		a=exposcall("Read",fd,fname);
+		if (a==-1 OR a==-2) then
+			break;
+		endif;
+		s=exposcall("Seek",fd,7);
+		if (fname!="-1") then
+			t=exposcall("Write",-2,fname);
+		endif;
+		n=n+1;
+	endwhile;
+	return 0;
+end
+}

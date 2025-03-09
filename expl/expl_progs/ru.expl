@@ -1,0 +1,32 @@
+int main()
+{
+decl
+	int t,fid,a,b,c;
+	str uname,buf,fname;
+enddecl
+begin
+	t=exposcall("Write",-2,"USERNAME");
+	t=exposcall("Read",-1,uname);
+	fid=exposcall("Open","root");
+	a=1;
+	c=exposcall("Seek",fid,3);
+	while (c==0) do
+		t=exposcall("Write",-2,"T");
+		b=exposcall("Read",fid,buf);
+		if (b==-1 OR b==-2) then
+			break;
+		endif;
+		if (buf==uname) then
+			c=exposcall("Seek",fid,-4);
+			b=exposcall("Read",fid,fname);
+			t=exposcall("Write",-2,fname);
+			t=exposcall("Delete",fname);
+			c=exposcall("Seek",fid,3);
+		endif;
+		c=exposcall("Seek",fid,7);
+	endwhile;
+	t=exposcall("Close",fid);
+				
+	return 0;
+end
+}

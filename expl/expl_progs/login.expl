@@ -1,0 +1,26 @@
+int main()
+{
+decl
+	int ret,t,b,a;
+	str uname,pwd;
+enddecl
+begin
+	b=1;
+	while (b==1) do
+		t=exposcall("Write",-2,"USERNAME");
+		a=exposcall("Read",-1,uname);
+		t=exposcall("Write",-2,"PASSWORD");
+		a=exposcall("Read",-1,pwd);
+		
+		a=exposcall("Login",uname,pwd);
+		if (a==-1) then
+			t=exposcall("Write",-2,"INVALID NAME");
+		endif;
+		
+		if (a==-2) then
+			t=exposcall("Write",-2,"PER DENIED");
+		endif;
+	endwhile;
+	return 0;
+end
+}

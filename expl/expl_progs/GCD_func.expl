@@ -1,0 +1,39 @@
+decl 
+	int GCD(int a,int b);
+enddecl
+
+int GCD(int a,int b)
+{
+decl
+	int r;	
+enddecl
+begin
+	while (b!=0) do
+		r=a%b;
+		a=b;
+		b=r;
+	endwhile;
+	return a;
+end
+}	
+
+int main()
+{	
+decl
+	int a,b,c,t;
+enddecl
+
+begin
+	t=exposcall("Write",-2,"INPUT:");
+	t=exposcall("Read",-1,a);
+	t=exposcall("Read",-1,b);
+	if (a>b) then
+		c=GCD(a,b);
+	else
+		c=GCD(b,a);
+	endif;
+	t=exposcall("Write",-2,"OUTPUT:");
+	t=exposcall("Write",-2,c);
+	return 0;
+end
+}

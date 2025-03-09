@@ -1,0 +1,38 @@
+int main()
+{
+decl
+	int count,pid1,pid2,t,semid,i,j;
+enddecl
+begin
+	count=0;
+	semid=exposcall("Semget");
+	pid1=exposcall("Fork");
+	if (pid1==0) then
+		i=0;
+		while (i<100) do
+			t=exposcall("SemLock",semid);
+			count=count+1;
+			t=exposcall("SemUnlock",semid);
+			i=i+1;
+		endwhile;
+	else
+		pid2=exposcall("Fork");
+		if (pid2==0) then
+			j=0;
+			while (j<100) do
+				t=exposcall("SemLock",semid);
+				count=count+1;
+				t=exposcall("SemUnlock",semid);
+				j=j+1;
+			endwhile;
+		else
+			t=exposcall("Wait",pid1);
+			t=exposcall("Wait",pid2);
+			t=exposcall("Write",-2,count);
+			t=exposcall("Semrelease",semid);
+		endif;
+	endif;
+	return 0;
+end
+}
+		

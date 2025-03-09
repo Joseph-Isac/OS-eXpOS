@@ -1,0 +1,15 @@
+int main()
+{	
+decl
+	int t,p;
+	str fname;
+enddecl
+begin
+	t=exposcall("Read",-1,fname);
+	t=exposcall("Delete",fname);
+	if (t==-1 OR t==-2) then
+		p=exposcall("Write",-2,"FAILED");
+	endif;
+	return 0;
+end
+}
