@@ -1,0 +1,152 @@
+alias pid R11;
+pid=[SYSTEM_STATUS_TABLE+1];
+
+[PROCESS_TABLE + 16*pid + 9] = 7;
+
+alias user_stack R4;
+user_stack = SP;
+
+[PROCESS_TABLE + 16*pid + 13] = SP;
+
+SP = 512*[PROCESS_TABLE + 16*pid + 11] - 1; //we don't need the offset
+
+alias syscall_num R1;  //-5
+alias arg1 R2;  //-4
+alias arg2 R3; //-3
+//arg3
+alias ret_val R0; //-1
+//IP+2
+
+syscall_num = [512*[PTBR + 2*(user_stack-5)/512] + (user_stack-5)%512];
+arg1 = [512*[PTBR + 2*(user_stack-4)/512] + (user_stack-4)%512];
+arg2 = [512*[PTBR + 2*(user_stack-3)/512] + (user_stack-3)%512];
+ret_val = 512*[PTBR + 2*(user_stack-1)/512] + (user_stack-1)%512;
+
+if(arg1 != -1) then
+	//arg1 = file descriptor - per process resource table index , arg2 = buffer - str/int variable
+	
+	if (arg1<0 || arg1>7) then
+		[ret_val]=-1;
+		[PROCESS_TABLE + 16*pid + 9] = 0;
+		SP = [PROCESS_TABLE + 16*pid + 13];
+		ireturn;
+	endif;
+	
+
+
+	alias resourcetable R5;
+	resourcetable=([PROCESS_TABLE+pid*16+11]+1)*512-16;
+	
+	if ([resourcetable+arg1*2]==-1 || [resourcetable+arg1*2]!=FILE) then
+		[ret_val]=-1;
+		[PROCESS_TABLE + 16*pid + 9] = 0;
+		SP = [PROCESS_TABLE + 16*pid + 13];
+		ireturn;
+	endif;
+	
+	
+
+	alias openfileindex R6;
+	alias inodeindex R7;
+	openfileindex=[resourcetable+arg1*2+1];
+	inodeindex=[OPEN_FILE_TABLE+openfileindex*4];
+	
+	multipush(R0,R1,R2,R3,R4,R5,R6,R7,R11);
+	R1=4;
+	R2=pid;
+	R3=inodeindex;
+	call RESOURCE_MANAGER;
+	R8=R0;
+	multipop(R0,R1,R2,R3,R4,R5,R6,R7,R11);
+	
+	if (R8==-1) then
+		[ret_val]=-1;
+		[PROCESS_TABLE + 16*pid + 9] = 0;
+		SP = [PROCESS_TABLE + 16*pid + 13];
+		ireturn;
+	endif;
+	
+	
+	alias lseek R8;
+	lseek=[OPEN_FILE_TABLE+openfileindex*4+2];	
+		
+	alias buffer_phy_addr R9;
+	buffer_phy_addr = [PTBR + 2*(arg2/512)]*512 + (arg2%512);
+	
+	if (inodeindex==INODE_ROOT) then
+		if (lseek==480) then
+			multipush(R0,R1,R2,R3,R4,R5,R6,R7,R8,R9,R11);
+			R1=5;
+			R2=pid;
+			R3=inodeindex;
+			call RESOURCE_MANAGER;
+			multipop(R0,R1,R2,R3,R4,R5,R6,R7,R8,R9,R11);
+			
+			[ret_val]=-2;
+			[PROCESS_TABLE + 16*pid + 9] = 0;
+			SP = [PROCESS_TABLE + 16*pid + 13];
+			ireturn;
+		endif;
+		
+		[buffer_phy_addr]=[ROOT_FILE+lseek];
+		[OPEN_FILE_TABLE+openfileindex*4+2]=[OPEN_FILE_TABLE+openfileindex*4+2]+1;
+	else
+		if (lseek==[INODE_TABLE+inodeindex*16+2]) then
+			multipush(R0,R1,R2,R3,R4,R5,R6,R7,R8,R9,R11);
+			R1=5;
+			R2=pid;
+			R3=inodeindex;
+			call RESOURCE_MANAGER;
+			multipop(R0,R1,R2,R3,R4,R5,R6,R7,R8,R9,R11);
+			
+			[ret_val]=-2;
+			[PROCESS_TABLE + 16*pid + 9] = 0;
+			SP = [PROCESS_TABLE + 16*pid + 13];
+			ireturn;
+		endif;	
+		
+		alias blocknumber R10;
+		blocknumber=[INODE_TABLE+16*inodeindex+8+(lseek/512)];
+		
+
+		multipush(R0,R1,R2,R3,R4,R5,R6,R7,R8,R9,R10,R11);
+		R1=2;
+		R2=blocknumber; //blocknumber is R10
+		R3=lseek%512;  //lseek is R8
+		R4=buffer_phy_addr; //buffer_phy_addr is R9
+		R5=pid; //pid is R11
+		call FILE_MANAGER;
+		multipop(R0,R1,R2,R3,R4,R5,R6,R7,R8,R9,R10,R11);
+		
+		[OPEN_FILE_TABLE+openfileindex*4+2]=[OPEN_FILE_TABLE+openfileindex*4+2]+1;
+		breakpoint;
+	endif;
+	
+
+	
+	multipush(R0,R1,R2,R3,R4,R5,R6,R7,R8,R9,R10,R11);
+	R1=5;
+	R2=pid;
+	R3=inodeindex;
+	call RESOURCE_MANAGER;
+	multipop(R0,R1,R2,R3,R4,R5,R6,R7,R8,R9,R10,R11);
+	
+	//print "*";
+	//print [buffer_phy_addr];
+	[ret_val]=0;
+else
+	multipush(R0, R1, R2, R3, R4,R11);
+	R1 = 4;
+	R2 = pid;
+	R3 = arg2;//R3 remains same
+    
+	call DEVICE_MANAGER;
+
+	multipop(R0, R1, R2, R3, R4,R11);
+	[ret_val] = 0;
+endif;
+
+
+[PROCESS_TABLE + 16*pid + 9] = 0;
+SP = [PROCESS_TABLE + 16*pid + 13];
+ireturn;

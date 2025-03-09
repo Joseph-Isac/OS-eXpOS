@@ -1,0 +1,147 @@
+
+[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=8;
+
+alias userSP R11;
+userSP=SP;
+
+[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+13]=SP;
+SP=[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+11]*512-1;
+
+alias pid R2;
+
+multipush(R11);
+R1=1;
+call PROCESS_MANAGER;
+pid=R0;//index of FREE PCB
+multipop(R11);
+
+
+if (pid==-1) then
+	[[PTBR+ 2 * ((userSP - 1) / 512)] * 512 + (userSP-1) % 512] = -1;
+	[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=0;
+	SP=[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+13];
+	ireturn;
+endif;
+
+alias currentPID R4;
+alias currentPCB R7;
+alias childPCB R8;
+alias childPTBR R9;
+alias currentPTBR R10;
+currentPID=[SYSTEM_STATUS_TABLE+1];
+currentPCB=PROCESS_TABLE+currentPID*16;
+childPCB=PROCESS_TABLE+R2*16;
+childPTBR=[childPCB+14];
+currentPTBR=[currentPCB+14];
+
+if ([currentPTBR+4]==-1) then 
+	R5=0;
+	while (R5<2) do
+		multipush(R2,R4,R5,R7,R8,R9,R10);
+		R1=1;
+		call MEMORY_MANAGER;
+		R3=R0;//FREE PAGE NUMBER;
+		multipop(R2,R4,R5,R7,R8,R9,R10);
+	
+		[currentPTBR+4+R5*2]=R3;//HEAP FOR PARENT
+		[currentPTBR+4+R5*2+1]="0110";
+		R5=R5+1;
+	endwhile;
+endif;
+
+R5=0;
+while (R5<2) do
+	multipush(R2,R4,R5,R7,R8,R9,R10);
+	R1=1;
+	call MEMORY_MANAGER;
+	R3=R0;//FREE PAGE NUMBER;
+	multipop(R2,R4,R5,R7,R8,R9,R10);
+	
+	[childPTBR+16+R5*2]=R3;//STACK FOR CHILD
+	[childPTBR+16+R5*2+1]="0110";
+	R5=R5+1;
+endwhile;
+
+multipush(R2,R4,R7,R8,R9,R10);
+R1=1;
+call MEMORY_MANAGER;
+R3=R0;//FREE PAGE NUMBER;
+multipop(R2,R4,R7,R8,R9,R10);
+	
+[childPCB+11]=R3;//USER AREA PG FOR CHILD
+
+[childPCB+3]=[currentPCB+3];
+[childPCB+6]=[currentPCB+6];
+[childPCB+10]=[currentPCB+10];
+[childPCB+7]=[currentPCB+7];
+[childPCB+13]=[currentPCB+13];
+
+[childPCB+9]=0;
+[childPCB+0]=0;
+[childPCB+12]=0;
+
+[childPCB+2]=currentPID;
+[childPCB+4]=CREATED;
+
+
+//PER PROCESS RESOURCE TABLE
+R5=0;
+while (R5<16) do
+	[(([childPCB+11]+1)*512)-16+R5]=[(([currentPCB+11]+1)*512)-16+R5];
+	[(([childPCB+11]+1)*512)-16+R5+1]=[(([currentPCB+11]+1)*512)-16+R5+1];
+	
+	if ([(([childPCB+11]+1)*512)-16+R5]==0) then
+		[OPEN_FILE_TABLE+[(([childPCB+11]+1)*512)-16+R5+1]*4+1]=[OPEN_FILE_TABLE+[(([childPCB+11]+1)*512)-16+R5+1]*4+1]+1;
+	endif;
+
+	if ([(([childPCB+11]+1)*512)-16+R5]==1) then
+		[SEMAPHORE_TABLE+[(([childPCB+11]+1)*512)-16+R5+1]*4+1]=[SEMAPHORE_TABLE+[(([childPCB+11]+1)*512)-16+R5+1]*4+1]+1;
+	endif;
+
+	R5=R5+2;
+endwhile;
+
+//DISK MAP TABLE
+R5=0;
+while (R5<10) do
+	[DISK_MAP_TABLE+pid*10+R5]=[DISK_MAP_TABLE+currentPID*10+R5];
+	R5=R5+1;
+endwhile;
+
+//LIB,HEAP,CODE
+R5=0;
+while (R5<8) do
+	[childPTBR+R5*2]=[currentPTBR+R5*2];
+	[childPTBR+R5*2+1]=[currentPTBR+R5*2+1];
+	if ([currentPTBR+R5*2]!=-1) then
+		[MEMORY_FREE_LIST+[currentPTBR+R5*2]]=[MEMORY_FREE_LIST+[currentPTBR+R5*2]]+1;
+	endif;
+	R5=R5+1;
+endwhile;
+
+//copy stack word by word
+R5=0;
+R6=0;
+while (R6<2) do
+	while (R5<512) do
+		[[childPTBR+16+R6*2]*512+R5]=[[currentPTBR+16+R6*2]*512+R5];
+		R5=R5+1;
+	endwhile;
+	R6=R6+1;
+endwhile;
+
+//PUSH BP TO KERNEL STACK
+[[childPCB+11]*512]=BP;
+
+alias childSP_ret R5;
+childSP_ret=[childPCB+13]-1;
+[[childPTBR+2*(childSP_ret/512)]*512+(childSP_ret%512)]=0;
+
+alias parentSP_ret R5;
+parentSP_ret=[currentPCB+13]-1;
+[[currentPTBR+2*(parentSP_ret/512)]*512+(parentSP_ret%512)]=pid;
+
+
+[currentPCB+9]=0;
+SP=[currentPCB+13];
+ireturn;

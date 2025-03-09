@@ -1,0 +1,49 @@
+alias curr_pid R0;
+curr_pid = [SYSTEM_STATUS_TABLE+1];
+
+multipush(BP);
+
+[PROCESS_TABLE + 16*curr_pid + 12] = SP%512;
+[PROCESS_TABLE + 16*curr_pid + 14] = PTBR;
+[PROCESS_TABLE + 16*curr_pid + 15] = PTLR;
+
+alias new_pid R1;
+
+if ([SYSTEM_STATUS_TABLE+5]!=0) then
+	if ([PROCESS_TABLE+16*SWAPPER_DAEMON+4]==READY || [PROCESS_TABLE+16*SWAPPER_DAEMON+4]==CREATED) then
+		new_pid=SWAPPER_DAEMON;
+	else
+		new_pid=0;
+	endif;
+else
+	R2=(curr_pid+1)%15;
+	while (1==1) do
+		if ([PROCESS_TABLE+16*R2+6]==0) then
+			if ([PROCESS_TABLE+16*R2+4]==READY || [PROCESS_TABLE+16*R2+4]==CREATED) then
+				new_pid=R2;
+				break;
+			endif;
+		endif;
+		R2=(R2+1)%15;
+	endwhile;
+endif;
+
+SP = 512*[PROCESS_TABLE + 16*new_pid + 11] + [PROCESS_TABLE + 16*new_pid + 12];
+PTBR = [PROCESS_TABLE + 16*new_pid + 14];
+PTLR = [PROCESS_TABLE + 16*new_pid + 15];
+
+[SYSTEM_STATUS_TABLE + 1] = new_pid;
+
+if([PROCESS_TABLE + 16*new_pid + 4] == CREATED) then
+	SP = [PROCESS_TABLE + 16*[SYSTEM_STATUS_TABLE+1] + 13];
+	BP = [[PROCESS_TABLE + 16*[SYSTEM_STATUS_TABLE+1] + 11]*512]; //DURING FORKING....
+	[PROCESS_TABLE + 16*new_pid + 4] = RUNNING;
+	[PROCESS_TABLE + 16*new_pid + 9]= 0;
+	ireturn;
+endif;
+
+[PROCESS_TABLE + 16*new_pid + 4] = RUNNING;
+
+multipop(BP);
+
+return;

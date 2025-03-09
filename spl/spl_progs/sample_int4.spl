@@ -1,0 +1,192 @@
+alias pid R7;
+pid=[SYSTEM_STATUS_TABLE+1];
+
+alias pid_entry R11;
+pid_entry=PROCESS_TABLE+pid*16;
+
+alias userSP R6;
+userSP=SP;
+
+[pid_entry+13]=SP;
+SP=[pid_entry+11]*512-1;
+
+alias ret_val R0;
+alias syscall R1;
+alias fname R2;
+alias per R3;
+
+ret_val=[PTBR+2*(userSP-1)/512]*512+(userSP-1)%512;
+syscall=[PTBR+2*(userSP-5)/512]*512+(userSP-5)%512;
+fname=[PTBR+2*(userSP-4)/512]*512+(userSP-4)%512;
+per=[PTBR+2*(userSP-3)/512]*512+(userSP-3)%512;
+
+[pid_entry+9]=[syscall];
+	
+//CREATE
+if ([syscall]==1) then
+	alias index R5;
+
+	index=0;
+	while (index<60) do
+		if ([INODE_TABLE+16*index+1]==[fname]) then
+			[ret_val]=0;
+			[pid_entry+9]=0;
+			SP=[pid_entry+13];		
+			ireturn;
+		endif;
+		index=index+1;
+	endwhile;
+
+	index=0;
+	while (index<60) do
+		if ([INODE_TABLE+16*index+1]==-1) then
+			break;
+		endif;
+		index=index+1;
+	endwhile;
+	
+	if (index==60) then
+		[ret_val]=-1;
+		[pid_entry+9]=0;
+		SP=[pid_entry+13];		
+		ireturn;
+	endif;
+	
+	//print index;
+
+	alias inodeindex R8;
+	inodeindex=INODE_TABLE+16*index;
+	[inodeindex+0]=DATA;
+	[inodeindex+1]=[fname];
+	[inodeindex+2]=0;
+	[inodeindex+3]=[pid_entry+3];
+	[inodeindex+4]=[per];
+	[inodeindex+8]=-1;
+	[inodeindex+9]=-1;
+	[inodeindex+10]=-1;
+	[inodeindex+11]=-1;
+
+	alias rootindex R8;
+	alias userid R9;
+	rootindex=ROOT_FILE+8*index;
+	userid=[pid_entry+3];
+	[rootindex+0]=[fname];
+	[rootindex+1]=0;
+	[rootindex+2]=2;
+	[rootindex+3]=[USER_TABLE+2*userid];
+	[rootindex+4]=[per];
+
+endif;
+
+if ([syscall]==4) then
+	
+	alias index R5;
+	index=0;
+	while (index<60) do
+		if ([INODE_TABLE+16*index+1]==[fname]) then
+			break;
+		endif;
+		index=index+1;
+	endwhile;
+	
+	alias inodeindex R12;
+	inodeindex=INODE_TABLE+16*index;
+
+	if (index==60) then
+		[ret_val]=0;
+		[pid_entry+9]=0;
+		SP=[pid_entry+13];		
+		ireturn;
+	endif;
+	
+	if ([inodeindex+0]!=DATA) then
+		[ret_val]=-1;
+		[pid_entry+9]=0;
+		SP=[pid_entry+13];		
+		ireturn;
+	endif;
+	
+	if ([inodeindex+4]==EXCLUSIVE) then
+		if ([pid_entry+3]!=1 && [inodeindex+3]!=[pid_entry+3]) then
+			[ret_val]=-1;
+			[pid_entry+9]=0;
+			SP=[pid_entry+13];		
+			ireturn;
+		endif;
+	endif;	
+		
+	multipush(R0,R1,R2,R3,R5,R6,R7,R11,R12);
+	R1=4;
+	R2=pid;
+	R3=index;
+	call RESOURCE_MANAGER;
+	multipop(R0,R1,R2,R3,R5,R6,R7,R11,R12);
+
+	if ([FILE_STATUS_TABLE+4*index+1]!=-1) then
+		multipush(R0,R1,R2,R3,R5,R6,R7,R11,R12);
+		R1=5;
+		R2=pid;
+		R3=index;
+		call RESOURCE_MANAGER;
+		multipop(R0,R1,R2,R3,R5,R6,R7,R11,R12);
+
+		[ret_val]=-2;
+		[pid_entry+9]=0;
+		SP=[pid_entry+13];		
+		ireturn;
+	endif;
+	
+	alias blocks R9;
+	blocks=inodeindex+8;
+	alias buffer_index R10;
+	R8=0;
+	while ([blocks+R8]!=-1) do
+		buffer_index=BUFFER_TABLE+4*([blocks+R8]%4);
+		if ([buffer_index]==[blocks+R8] && [buffer_index+1]==1) then
+			[buffer_index+1]=0;
+		endif;
+		
+		multipush(R0,R1,R2,R3,R5,R6,R7,R8,R9,R11,R12);
+		R1=4;
+		R2=[blocks+R8];
+		call MEMORY_MANAGER;
+		multipop(R0,R1,R2,R3,R5,R6,R7,R8,R9,R11,R12);
+		
+		R8=R8+1;
+	endwhile;
+
+	
+	R9=0;
+	while (R9<5) do
+		[inodeindex+R9]=-1;
+		R9=R9+1;
+	endwhile;
+	
+	R9=8;
+	while (R9<12) do
+		[inodeindex+R9]=-1;
+		R9=R9+1;
+	endwhile;
+
+	alias rootindex R8;
+	rootindex=ROOT_FILE+8*index;
+	R9=0;
+	while (R9<5) do
+		[rootindex+R9]=-1;
+		R9=R9+1;
+	endwhile;
+
+	multipush(R0,R1,R2,R3,R5,R6,R7,R11,R12);
+	R1=5;
+	R2=pid;
+	R3=index;
+	call RESOURCE_MANAGER;
+	multipop(R0,R1,R2,R3,R5,R6,R7,R8,R11,R12);
+	
+endif;
+
+
+[ret_val]=0;
+[pid_entry+9]=0;
+SP=[pid_entry+13];		
+ireturn;

@@ -1,0 +1,186 @@
+alias ret_val R0;
+alias functionNum R1;
+alias arg1 R2;
+alias arg2 R3;
+alias arg3 R4;
+alias currentPID R5;
+
+//BUFFERED WRITE(1) / READ(2)
+if (functionNum==1 || functionNum==2) then
+	alias buffernum R6;
+	buffernum=arg1%4;
+	
+	multipush(R0,R1,R2,R3,R4,R5,R6);
+	R1=1;
+	R2=currentPID;
+	R3=buffernum;
+	call RESOURCE_MANAGER;
+	multipop(R0,R1,R2,R3,R4,R5,R6);
+
+		
+	if ([BUFFER_TABLE+4*buffernum+0]!=arg1) then
+		if ([BUFFER_TABLE+4*buffernum+1]==1) then
+			multipush(R0,R1,R2,R3,R4,R5,R6);
+			R1=1;
+			R2=currentPID;
+			R3=BUFFER_BASE+buffernum;//***pgnum
+			R4=[BUFFER_TABLE+4*buffernum+0];
+			call DEVICE_MANAGER;
+			multipop(R0,R1,R2,R3,R4,R5,R6);
+			
+			[BUFFER_TABLE+4*buffernum+1]=0;
+		endif;
+		
+		multipush(R0,R1,R2,R3,R4,R5,R6);
+		R1=2;
+		R4=arg1;
+		R2=currentPID;
+		R3=BUFFER_BASE+buffernum;//***pgnum
+		call DEVICE_MANAGER;
+		multipop(R0,R1,R2,R3,R4,R5,R6);
+					
+		[BUFFER_TABLE+4*buffernum+0]=arg1;
+	endif;
+
+	if (functionNum==2) then 
+		//READ
+		//arg1=disk block num , arg2=offset, arg3=memory address
+		[arg3]=[(BUFFER_BASE+buffernum)*512+arg2];
+	else  
+		//WRITE
+		//arg1=disk block num, arg2= offset, arg3= word
+		[(BUFFER_BASE+buffernum)*512+arg2]=arg3;
+		[BUFFER_TABLE+4*buffernum+1]=1;//dirty bit
+	
+	endif;
+	
+
+	multipush(R0,R1,R2,R3,R4,R5,R6);
+	R1=2;
+	R2=currentPID;
+	R3=buffernum;
+	call RESOURCE_MANAGER;
+	multipop(R0,R1,R2,R3,R4,R5,R6);
+	
+	return;
+endif;
+
+//OPEN
+if (functionNum==3) then
+	//arg1=fname
+
+	alias inodeindex R6;
+	inodeindex=0;
+	while (inodeindex<60) do
+		if ([INODE_TABLE+16*inodeindex+1]==arg1) then
+			break;
+		endif;
+		inodeindex=inodeindex+1;
+	endwhile;
+
+	if (inodeindex==60) then
+		ret_val=-1;
+		return;
+	endif;
+
+	multipush(R0,R1,R2,R3,R4,R5,R6);
+	R1=4;//AQUIRE_INODE
+	R2=currentPID;
+	R3=inodeindex;
+	call RESOURCE_MANAGER;
+	R7=R0;
+	multipop(R0,R1,R2,R3,R4,R5,R6);
+	
+	if (R7==-1) then
+		ret_val=-1;
+		return;
+	endif;
+
+	if ([INODE_TABLE+16*inodeindex+0]==EXEC) then
+		multipush(R0,R1,R2,R3,R4,R5,R6);
+		R1=5;//RELEASE_INODE
+		R2=currentPID;
+		R3=inodeindex;
+		call RESOURCE_MANAGER;
+		multipop(R0,R1,R2,R3,R4,R5,R6);
+		
+		ret_val=-1;
+		return;
+	endif;
+		
+	alias filetableindex R7;
+	filetableindex=0;
+	while (filetableindex<32) do
+		if ([OPEN_FILE_TABLE+4*filetableindex+0]==-1) then
+			break;
+		endif;
+		filetableindex=filetableindex+1;
+	endwhile;
+
+	if (filetableindex==32) then
+		multipush(R0,R1,R2,R3,R4,R5,R6,R7);
+		R1=5;//RELEASE_INODE
+		R2=currentPID;
+		R3=inodeindex;
+		call RESOURCE_MANAGER;
+		multipop(R0,R1,R2,R3,R4,R5,R6,R7);
+		
+		ret_val=-2;
+		return;
+	endif;
+	
+	if (arg1=="root") then
+		[OPEN_FILE_TABLE+4*filetableindex+0]=INODE_ROOT;
+	else
+		if ([FILE_STATUS_TABLE+4*inodeindex+1]==-1) then
+			[FILE_STATUS_TABLE+4*inodeindex+1]=1;
+		else
+			[FILE_STATUS_TABLE+4*inodeindex+1]=[FILE_STATUS_TABLE+4*inodeindex+1]+1;
+		endif;
+		
+		[OPEN_FILE_TABLE+4*filetableindex+0]=inodeindex;
+	endif;
+	
+	[OPEN_FILE_TABLE+4*filetableindex+1]=1;
+	[OPEN_FILE_TABLE+4*filetableindex+2]=0;
+	
+	multipush(R0,R1,R2,R3,R4,R5,R6,R7);
+	R1=5;//RELEASE_INODE
+	R2=currentPID;
+	R3=inodeindex;
+	call RESOURCE_MANAGER;
+	multipop(R0,R1,R2,R3,R4,R5,R6,R7);
+		
+	ret_val=filetableindex;
+	return;
+endif;
+
+//CLOSE
+if (functionNum==4) then
+	//arg1= file table index
+	
+	alias inodeindex R6;
+	inodeindex=[OPEN_FILE_TABLE+arg1*4+0];
+	
+	[OPEN_FILE_TABLE+arg1*4+1]=[OPEN_FILE_TABLE+arg1*4+1]-1;
+	
+	if ([OPEN_FILE_TABLE+arg1*4+1]==0) then
+		[OPEN_FILE_TABLE+arg1*4+0]=-1;
+		[OPEN_FILE_TABLE+arg1*4+1]=-1;
+		[OPEN_FILE_TABLE+arg1*4+2]=-1;
+		[OPEN_FILE_TABLE+arg1*4+3]=-1;
+		
+		if ([INODE_TABLE+inodeindex*16]!="root") then
+			[FILE_STATUS_TABLE+inodeindex*4+1]=[FILE_STATUS_TABLE+inodeindex*4+1]-1;
+		endif;
+		
+		if ([FILE_STATUS_TABLE+inodeindex*4+1]==0) then
+			[FILE_STATUS_TABLE+inodeindex*4+1]=-1;
+		endif;
+	endif;
+	
+	return;
+endif;
+		
+		
+	

@@ -1,0 +1,98 @@
+alias ret_val R0;
+alias functionNum R1;
+alias currentPID R2;
+alias arg1 R3;
+alias arg2 R4;
+
+if (functionNum==1) then
+	//arg 1= pgnum, arg2=block num
+	multipush(R0,R1,R2,R3,R4);
+	R1=3;
+	R2=currentPID;
+	call RESOURCE_MANAGER;
+	//print "DISK_ACQUIRED";
+	multipop(R0,R1,R2,R3,R4);
+
+	[DISK_STATUS_TABLE+0]=1;
+	[DISK_STATUS_TABLE+1]=1;//STORE
+	[DISK_STATUS_TABLE+2]=arg1;
+	[DISK_STATUS_TABLE+3]=arg2;
+	[DISK_STATUS_TABLE+4]=currentPID;
+	
+	store(arg1,arg2);
+	[PROCESS_TABLE+16*currentPID+4]=WAIT_DISK;
+
+	multipush(R0,R1,R2,R3,R4);
+	call SCHEDULER;
+	multipop(R0,R1,R2,R3,R4);
+
+	return;
+	
+endif;
+
+if (functionNum==2) then //disk load
+	//arg 1= pgnum, arg2=block num
+	multipush(R0,R1,R2,R3,R4);
+	R1=3;
+	R2=currentPID;
+	call RESOURCE_MANAGER;
+	multipop(R0,R1,R2,R3,R4);
+
+	[DISK_STATUS_TABLE+0]=1;
+	[DISK_STATUS_TABLE+1]=0;//LOAD
+	[DISK_STATUS_TABLE+2]=arg1;
+	[DISK_STATUS_TABLE+3]=arg2;
+	[DISK_STATUS_TABLE+4]=currentPID;
+
+	load(arg1,arg2);
+	[PROCESS_TABLE+16*currentPID+4]=WAIT_DISK;
+
+	multipush(R0,R1,R2,R3,R4);
+	call SCHEDULER;
+	multipop(R0,R1,R2,R3,R4);
+	
+	//print "DISK_ACQUIRED";
+
+	return;
+endif;
+	
+if (functionNum==3) then //terminal write
+	multipush(R0,R1,R2,R3,R4);
+	R1=8;
+	R2=[SYSTEM_STATUS_TABLE+1];
+	call RESOURCE_MANAGER;
+	multipop(R0,R1,R2,R3,R4);
+	
+	print R3;
+	
+	multipush(R0,R1,R2,R3,R4);
+	R1=9;
+	R2=[SYSTEM_STATUS_TABLE+1];
+	call RESOURCE_MANAGER;
+	R5=R0;//return value of mod_0
+	multipop(R0,R1,R2,R3,R4);
+	R0=R5;//return value should be in R0
+	return;
+endif;
+
+if (functionNum==4) then //terminal read
+	multipush(R0,R1,R2,R3,R4);	
+	R1=8;
+	R2=[SYSTEM_STATUS_TABLE+1];
+	call RESOURCE_MANAGER;
+	multipop(R0,R1,R2,R3,R4);
+	read;
+	[PROCESS_TABLE+16*[SYSTEM_STATUS_TABLE+1]+4]=WAIT_TERMINAL;
+	
+	//invoking context switch
+	multipush(R0,R1,R2,R3,R4);
+	call SCHEDULER;
+	multipop(R0,R1,R2,R3,R4);
+	alias phy_addr R5;
+	phy_addr=([PTBR+2*(R3/512)]*512) + (R3%512);
+	[phy_addr]=[PROCESS_TABLE+16*[SYSTEM_STATUS_TABLE+1]+8];
+	return; 
+endif;
+
+return;
+

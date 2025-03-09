@@ -1,0 +1,40 @@
+start:
+    PUSH BP               
+    MOV BP, SP            
+
+   
+    MOV R1, [BP + 6]      
+    MOV R2, [BP + 8]      
+    MOV R3, [BP + 10]     
+
+   
+    CMP R1, 1             
+    JNZ invalid_fd       
+
+    
+    PUSH R3               
+    PUSH R2               
+    PUSH R1              
+
+    INT 7                 
+
+    
+    POP R1                
+    POP R2                
+    POP R3               
+
+    MOV [BP + 4], R0      
+
+   
+    MOV SP, BP           
+    POP BP                
+    RET                   
+
+invalid_fd:
+    
+    MOV R0, -1            
+    MOV [BP + 4], R0      
+
+    MOV SP, BP            
+    POP BP                
+    RET                   

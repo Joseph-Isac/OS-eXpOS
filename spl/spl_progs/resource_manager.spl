@@ -1,0 +1,179 @@
+alias ret_val R0;
+alias functionNum R1;
+alias currentPID R2;
+
+//ACQUIRE BUFFER
+if (functionNum==1) then
+	alias buffernum R3;
+	while ([BUFFER_TABLE+buffernum*4+2]!=-1) do
+		[PROCESS_TABLE+16*currentPID+4]=WAIT_BUFFER;
+		[PROCESS_TABLE+16*currentPID+5]=buffernum;
+		multipush(R0,R1,R2,R3);
+		call SCHEDULER;
+		multipop(R0,R1,R2,R3);
+	endwhile;
+
+	[BUFFER_TABLE+buffernum*4+2]=currentPID;
+	return;
+endif;
+
+//RELEASE BUFFER
+if (functionNum==2) then
+        alias buffernum R3;
+	
+	if ([BUFFER_TABLE+buffernum*4+2]!=currentPID) then
+		ret_val=-1;
+		return;
+	endif;
+	
+	[BUFFER_TABLE+buffernum*4+2]=-1;
+	
+	R4=0;
+	while (R4<16) do
+		if ([PROCESS_TABLE+R4*16+4]==WAIT_BUFFER && [PROCESS_TABLE+R4*16+5]==buffernum) then
+			[PROCESS_TABLE+R4*16+4]=READY;
+			[PROCESS_TABLE+R4*16+5]=-1;
+		endif;
+		R4=R4+1;
+	endwhile;
+
+	ret_val=0;
+	return;
+endif;
+	
+	
+//ACQUIRE DISK
+if (functionNum==3) then
+	while ([DISK_STATUS_TABLE+0]==1) do
+		[PROCESS_TABLE+16*currentPID+4]=WAIT_DISK;
+		multipush(R0,R1,R2);
+		call SCHEDULER;
+		multipop(R0,R1,R2);
+	endwhile;
+	[DISK_STATUS_TABLE+0]=1;
+	[DISK_STATUS_TABLE+4]=currentPID;
+	return;
+endif;
+
+//ACQUIRE INODE
+if (functionNum==4) then
+	alias index R3;
+	while ([FILE_STATUS_TABLE+index*4]!=-1) do
+		[PROCESS_TABLE+16*currentPID+4]=WAIT_FILE;
+		[PROCESS_TABLE+16*currentPID+5]=index;
+		multipush(R0,R1,R2,R3);
+		call SCHEDULER;
+		multipop(R0,R1,R2,R3);
+	endwhile;
+	
+	if ([INODE_TABLE+16*index+1]==-1) then
+		ret_val=-1;
+		return;
+	endif;
+	
+	[FILE_STATUS_TABLE+index*4]=currentPID;
+	
+	ret_val=0;
+	return;
+endif;
+
+//RELEASE INODE
+if (functionNum==5) then
+	alias index R3;
+	if (currentPID!=[FILE_STATUS_TABLE+index*4]) then
+		ret_val=-1;
+		return;
+	endif;
+	
+	[FILE_STATUS_TABLE+index*4]=-1;
+
+	R4=0;
+	while (R4<16) do
+		if ([PROCESS_TABLE+R4*16+4]==WAIT_FILE && [PROCESS_TABLE+R4*16+5]==index) then
+			[PROCESS_TABLE+R4*16+4]=READY;
+			[PROCESS_TABLE+R4*16+5]=-1;
+		endif;
+		R4=R4+1;
+	endwhile;
+	
+	ret_val=0;
+	return;
+endif;
+
+//ACQUIRE SEMAPHORE
+if (functionNum==6) then
+	R4=0;
+	while (R4<MAX_SEM_COUNT) do
+		R5=(R4*4)+1;
+		if ([SEMAPHORE_TABLE+R5]==0) then
+			break;
+		endif;
+		R4=R4+1;
+	endwhile;
+	
+	if (R4==MAX_SEM_COUNT) then
+		ret_val=-1;
+		return;
+	endif;
+	
+	[SEMAPHORE_TABLE+(R4*4)+0]=-1;
+	[SEMAPHORE_TABLE+(R4*4)+1]=1;
+	
+	ret_val=R4;
+	return;
+endif;
+
+//RELEASE SEMAPHORE
+if (functionNum==7) then
+	alias semtableindex R3;
+	if ([SEMAPHORE_TABLE+(semtableindex*4)+0]==currentPID) then
+		[SEMAPHORE_TABLE+(semtableindex*4)+0]=-1;
+		R4=0;
+		while (R4<16) do
+			if ([PROCESS_TABLE+(16*R4)+4]==WAIT_SEMAPHORE && [PROCESS_TABLE+(16*R4)+5]==semtableindex) then
+				[PROCESS_TABLE+(16*R4)+4]=READY;
+				[PROCESS_TABLE+(16*R4)+5]=-1;
+			endif;
+			R4=R4+1;
+		endwhile;
+		[SEMAPHORE_TABLE+(semtableindex*4)+1]=[SEMAPHORE_TABLE+(semtableindex*4)+1]-1;
+	endif;
+	ret_val=0;
+	return;
+endif;
+	
+	
+//ACQUIRE TERMINAL
+if (functionNum==8) then
+	while ([TERMINAL_STATUS_TABLE]==1) do
+		[PROCESS_TABLE+16*currentPID+4]=WAIT_TERMINAL;
+		multipush(R0,R1,R2);
+		call SCHEDULER;
+		multipop(R0,R1,R2);
+	endwhile;
+	
+	[TERMINAL_STATUS_TABLE]=1;
+	[TERMINAL_STATUS_TABLE+1]=currentPID;
+
+	return;
+endif;
+
+//RELEASE TERMINAL
+if (functionNum==9) then
+	if (currentPID!=[TERMINAL_STATUS_TABLE+1]) then
+		ret_val=-1;
+		return;
+	endif;
+	[TERMINAL_STATUS_TABLE]=0;
+	alias i R4;
+	i=0;
+	while (i<16) do
+		if ([PROCESS_TABLE+16*i+4]==WAIT_TERMINAL) then
+			[PROCESS_TABLE+16*i+4]=READY;
+		endif;
+		i=i+1;
+	endwhile;
+	ret_val=0;
+	return;
+endif;
+

@@ -1,0 +1,86 @@
+alias userSP R5;
+userSP=SP;
+
+[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+13]=SP;
+SP=[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+11]*512-1;
+
+alias sysnum R4;
+sysnum=[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-5)/512)]*512+((userSP-5)%512)];
+
+
+//SEMGET
+if (sysnum==17) then
+	[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=17;
+	R6=0;
+	alias resourcetable R7;
+	resourcetable=(([PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+11]+1)*512)-16;
+	
+	while (R6<16) do
+		if ([resourcetable+R6]==-1) then
+			break;
+		endif;
+		R6=R6+2;
+	endwhile;
+	
+	if (R6==16) then
+		[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-1)/512)]*512+((userSP-1)%512)]=-1;
+		[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=0;
+		SP=[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+13];
+		ireturn;
+	endif;
+	
+	
+	multipush(R4,R5,R6,R7);//CHECK IF NEEDED ALL REG'S
+	R1=6;
+	R2=[SYSTEM_STATUS_TABLE+1];
+	call RESOURCE_MANAGER;
+	multipop(R4,R5,R6,R7);
+
+	if (R0==-1) then
+		[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-1)/512)]*512+((userSP-1)%512)]=-2;
+		[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=0;
+		SP=[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+13];
+		ireturn;
+	endif;
+
+	[resourcetable+R6]=1;//semaphore
+	[resourcetable+R6+1]=R0;//semaphore id
+
+	[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-1)/512)]*512+((userSP-1)%512)]=R6/2;
+	[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=0;
+	SP=[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+13];
+	
+	ireturn;
+endif;
+	
+//SEMRELEASE
+if (sysnum==18) then
+	[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=18;
+	alias arg1 R3;
+	arg1=[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-4)/512)]*512+((userSP-4)%512)];
+	
+	alias resourcetable R7;
+	resourcetable=(([PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+11]+1)*512)-16;
+
+	if ([resourcetable+(arg1*2)]!=1 || (arg1<0 || arg1>7)) then
+		[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-1)/512)]*512+((userSP-1)%512)]=-1;
+		[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=0;
+		SP=[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+13];
+		ireturn;
+	endif;
+	
+	multipush(R3,R4,R5,R7);
+	R1=7;
+	R3=[resourcetable+(arg1*2)+1];
+	R2=[SYSTEM_STATUS_TABLE+1];
+	call RESOURCE_MANAGER;
+	multipop(R3,R4,R5,R7);
+
+	[resourcetable+(arg1*2)]=-1;
+	[resourcetable+(arg1*2)+1]=-1;
+
+	[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-1)/512)]*512+((userSP-1)%512)]=0;
+	[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=0;
+	SP=[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+13];
+	ireturn;
+endif;

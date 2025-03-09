@@ -1,0 +1,83 @@
+alias userSP R5;
+userSP=SP;
+
+[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+13]=SP;
+SP=[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+11]*512-1;
+
+alias sysnum R4;
+sysnum=[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-5)/512)]*512+((userSP-5)%512)];
+
+//SEMLOCK SYS CALL
+if (sysnum==19) then
+	[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=19;
+	alias semdesc R1;
+	semdesc=[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-4)/512)]*512+((userSP-4)%512)];
+
+	alias resourcetable R6;
+	resourcetable=(([PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+11]+1)*512)-16;
+
+	if (semdesc<0 || semdesc>7 || [resourcetable+(semdesc*2)]!=1) then
+		[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-1)/512)]*512+((userSP-1)%512)]=-1;
+		SP=[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+13];		
+		[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=0;
+		ireturn;
+	endif;
+	
+	while ([SEMAPHORE_TABLE+([resourcetable+(semdesc*2)+1]*4)]!=-1 && [SEMAPHORE_TABLE+([resourcetable+(semdesc*2)+1]*4)]!=[SYSTEM_STATUS_TABLE+1]) do
+		[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+4]=WAIT_SEMAPHORE;
+		[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+5]=[resourcetable+(semdesc*2)+1];
+		multipush(R1,R4,R5,R6);
+		call SCHEDULER;
+		multipop(R1,R4,R5,R6);
+	endwhile;
+	
+	[SEMAPHORE_TABLE+([resourcetable+(semdesc*2)+1]*4)]=[SYSTEM_STATUS_TABLE+1];
+	
+	[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-1)/512)]*512+((userSP-1)%512)]=0;	
+	SP=[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+13];		
+	[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=0;
+	ireturn;
+endif;
+
+//SEMUNLOCK SYS CALL
+if (sysnum==20) then
+	[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=20;
+	alias semdesc R1;
+	semdesc=[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-4)/512)]*512+((userSP-4)%512)];
+
+	alias resourcetable R6;
+	resourcetable=(([PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+11]+1)*512)-16;
+
+
+	if (semdesc<0 || semdesc>7 || [resourcetable+(semdesc*2)]!=1) then
+		[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-1)/512)]*512+((userSP-1)%512)]=-1;
+		SP=[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+13];		
+		[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=0;
+		ireturn;
+	endif;
+
+	if ([SEMAPHORE_TABLE+([resourcetable+(semdesc*2)+1]*4)]!=-1) then
+		if ([SEMAPHORE_TABLE+([resourcetable+(semdesc*2)+1]*4)]!=[SYSTEM_STATUS_TABLE+1]) then
+			[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-1)/512)]*512+((userSP-1)%512)]=-2;
+			SP=[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+13];		
+			[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=0;
+			ireturn;
+		endif;
+		
+		[SEMAPHORE_TABLE+([resourcetable+(semdesc*2)+1]*4)]=-1;
+		
+		R7=0;
+		while (R7<16) do
+			if ([PROCESS_TABLE+R7*16+4]==WAIT_SEMAPHORE && [PROCESS_TABLE+R7*16+5]==[resourcetable+(semdesc*2)+1]) then
+				[PROCESS_TABLE+R7*16+4]=READY;
+				[PROCESS_TABLE+R7*16+4+1]=-1;
+			endif;
+			R7=R7+1;
+		endwhile;
+	endif;
+
+	[[[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+14]+2*((userSP-1)/512)]*512+((userSP-1)%512)]=0;
+	SP=[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+13];		
+	[PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]=0;
+	ireturn;
+endif;

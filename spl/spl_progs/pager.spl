@@ -1,0 +1,179 @@
+alias functionNum R1;
+alias pid R2;
+
+//SWAP_OUT
+if (functionNum==1) then
+	alias selectedpid R4;
+	selectedpid=-1;
+
+	R3=3;
+	while (R3<15) do
+		R7=PROCESS_TABLE+16*R3;
+		if ([R7+6]==0 && [R7+4]==WAIT_PROCESS) then
+			selectedpid=R3;
+			break;
+		endif;
+		inline "INR R3";
+	endwhile;
+
+	if (R3==15) then
+		R3=3;	
+		while (R3<15) do
+			R7=PROCESS_TABLE+16*R3;
+			if ([R7+6]==0 && [R7+4]==WAIT_SEMAPHORE) then
+				selectedpid=R3;
+				break;
+			endif;
+			inline "INR R3";
+		endwhile;
+		
+	endif;
+	
+	
+	if (R3==15) then
+		R3=3;	
+		alias pid R7;
+		while (R3<15) do
+			pid=PROCESS_TABLE+16*R3;
+			if ([pid+4]!=RUNNING || [pid+4]!=TERMINATED || [pid+4]!=ALLOCATED || [pid+6]==0) then 
+				if (selectedpid==-1) then
+					selectedpid=R3;
+				else
+					if ([pid+0]>[PROCESS_TABLE+16*selectedpid+0]) then
+						selectedpid=R3;
+					endif;
+				endif;
+			endif;
+			inline "INR R3";
+		endwhile;
+	endif;
+	
+	if (selectedpid==-1) then
+		[SYSTEM_STATUS_TABLE+5]=0;
+		return;
+	endif;
+	
+	alias spcb R5;
+	spcb=PROCESS_TABLE+16*selectedpid;
+	[spcb+0]=0;
+	
+	R10=2;
+	while(R10<10) do
+		if([[spcb+14]+2*R10]!=-1) then
+			R6=MEMORY_FREE_LIST+[[spcb+14]+2*R10];
+			if(((R10>=2 && R10<=3) && [R6]==1) || (R10>=8 && R10<=9)) then
+				multipush(R1,R2,R3,R4,R5,R6,R10);
+				R1=6;
+				call MEMORY_MANAGER;
+				multipop(R1,R2,R3,R4,R5,R6,R10);
+				
+				[DISK_MAP_TABLE+selectedpid*10+R10] = R0;
+				
+				multipush(R1,R2,R3,R4,R5,R6,R10);
+				R1=1;
+				R2=pid;
+				R3=[[spcb+14]+2*R10];
+				R4=R0;
+				call DEVICE_MANAGER;
+				multipop(R1,R2,R3,R4,R5,R6,R10);
+			endif;
+			
+			if((R10!=2 && R10!=3) || ((R10>=2 && R10<=3) && [R6]==1)) then
+				multipush(R1,R2,R3,R4,R5,R6,R10);
+				R1=2;
+				R2=[[spcb+14]+2*R10];
+				call MEMORY_MANAGER;
+				multipop(R1,R2,R3,R4,R5,R6,R10);
+			
+				[[spcb+14]+2*R10]=-1;
+				[[spcb+14]+2*R10+1]="0000";
+			endif;
+			
+		endif;
+		R10=R10+1;
+	endwhile;
+			
+	[spcb+6]=1;
+	
+	[SYSTEM_STATUS_TABLE+4]=[SYSTEM_STATUS_TABLE+4]+1;
+endif;
+
+//SWAP_IN
+if (functionNum==2) then
+	R3=3;
+	alias selectedpid R5;
+	selectedpid=-1;
+	while (R3<15) do
+		R7=PROCESS_TABLE+16*R3;
+		if ([R7+4]==READY && [R7+6]==1) then
+			if (selectedpid==-1) then
+				selectedpid=R3;
+			else
+				if ([R7+0]>[PROCESS_TABLE+16*selectedpid]) then
+					selectedpid=R3;
+				endif;
+			endif;
+		endif;
+		inline "INR R3";
+	endwhile;
+
+	if (selectedpid==-1) then
+		[SYSTEM_STATUS_TABLE+5]=0;
+		return;
+	endif;
+
+	alias spcb R7;
+	spcb=PROCESS_TABLE+16*selectedpid;
+
+	alias sdmt R8;
+	sdmt=DISK_MAP_TABLE+10*selectedpid;
+
+	[spcb+0]=0;
+	
+	alias iter R4;
+	iter=2;
+	while(iter<10) do
+		if([sdmt+iter]!=-1) then
+			if((iter>=2 && iter<=3) || (iter>=8 && iter<=9)) then
+				alias pageNum R6;
+
+				multipush(R1,R2,R3,R4,R5,R6,R7,R8);
+				R1=1;
+				call MEMORY_MANAGER;
+				multipop(R1,R2,R3,R4,R5,R6,R7,R8);
+				
+				pageNum=R0;
+				
+				multipush(R1,R2,R3,R4,R5,R6,R7,R8);
+				R1=2;
+				R2=pid;
+				R4=[sdmt+iter];
+				R3=pageNum;
+				call DEVICE_MANAGER;
+				multipop(R1,R2,R3,R4,R5,R6,R7,R8);
+								
+				multipush(R1,R2,R3,R4,R5,R6,R7,R8);
+				R1=4;
+				R2=[sdmt+iter];
+				call MEMORY_MANAGER;
+				multipop(R1,R2,R3,R4,R5,R6,R7,R8);
+				
+				[[spcb+14]+2*iter]=pageNum;
+				[[spcb+14]+2*iter+1]="0110";
+				
+				[sdmt+iter]=-1;
+		
+			endif;
+		endif;
+		
+		iter = iter + 1;
+		
+	endwhile;	
+	[spcb+6]=0;
+
+	[SYSTEM_STATUS_TABLE+4]=[SYSTEM_STATUS_TABLE+4]-1;
+	
+endif;
+
+[SYSTEM_STATUS_TABLE+5]=0;
+return;
