@@ -25,7 +25,6 @@ per=[PTBR+2*(userSP-3)/512]*512+(userSP-3)%512;
 //CREATE
 if ([syscall]==1) then
 	alias index R5;
-
 	index=0;
 	while (index<60) do
 		if ([INODE_TABLE+16*index+1]==[fname]) then
@@ -79,7 +78,6 @@ if ([syscall]==1) then
 endif;
 
 if ([syscall]==4) then
-	
 	alias index R5;
 	index=0;
 	while (index<60) do
@@ -136,34 +134,34 @@ if ([syscall]==4) then
 		ireturn;
 	endif;
 	
-	alias blocks R9;
-	blocks=inodeindex+8;
-	alias buffer_index R10;
-	R8=0;
-	while ([blocks+R8]!=-1) do
-		buffer_index=BUFFER_TABLE+4*([blocks+R8]%4);
-		if ([buffer_index]==[blocks+R8] && [buffer_index+1]==1) then
-			[buffer_index+1]=0;
+	alias i R8;
+	alias j R9;
+	
+	i = 0;
+	while (i<4) do
+		if([inodeindex+8+i]!=-1) then
+			j=0;
+			while (j<4) do
+				//if buffer entry for that file is dirty then reset cause we don't want it to be written back
+				if([BUFFER_TABLE+j*4]==[inodeindex+8+i] && [BUFFER_TABLE+j*4+1]==1) then
+					[BUFFER_TABLE+j*4+1]=0;
+				endif;
+				j=j+1;
+			endwhile;
+			
+			multipush(R0,R1,R2,R3,R5,R6,R7,R8,R9,R11,R12);
+			R1=4;
+			R2=[inodeindex+8+i];
+			call MEMORY_MANAGER;
+			multipop(R0,R1,R2,R3,R5,R6,R7,R8,R9,R11,R12);
+			
 		endif;
 		
-		multipush(R0,R1,R2,R3,R5,R6,R7,R8,R9,R11,R12);
-		R1=4;
-		R2=[blocks+R8];
-		call MEMORY_MANAGER;
-		multipop(R0,R1,R2,R3,R5,R6,R7,R8,R9,R11,R12);
-		
-		R8=R8+1;
+		i=i+1;
 	endwhile;
 
-	
 	R9=0;
-	while (R9<5) do
-		[inodeindex+R9]=-1;
-		R9=R9+1;
-	endwhile;
-	
-	R9=8;
-	while (R9<12) do
+	while (R9<16) do
 		[inodeindex+R9]=-1;
 		R9=R9+1;
 	endwhile;
@@ -176,7 +174,7 @@ if ([syscall]==4) then
 		R9=R9+1;
 	endwhile;
 
-	multipush(R0,R1,R2,R3,R5,R6,R7,R11,R12);
+	multipush(R0,R1,R2,R3,R5,R6,R7,R8,R11,R12);
 	R1=5;
 	R2=pid;
 	R3=index;
