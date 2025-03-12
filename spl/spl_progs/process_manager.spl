@@ -65,6 +65,20 @@ endif;
 if(functionNum == 3) then
 	alias pcb R6;
 	pcb=PROCESS_TABLE + (currentPID * 16);
+	
+	if ([PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]!=9) then
+		R5=0;
+		while (R5<16) do
+			if ([PROCESS_TABLE+R5*16+4]==WAIT_PROCESS && [PROCESS_TABLE+R5*16+5]==currentPID) then
+				[PROCESS_TABLE+R5*16+4]=READY;
+				[PROCESS_TABLE+R5*16+5]=-1;
+			endif;
+			if([PROCESS_TABLE+R5*16+2]==currentPID) then
+				[PROCESS_TABLE+R5*16+2]=-1;
+			endif;
+			R5=R5+1;
+		endwhile;
+	endif;
 
 	//Free Page Table
 	multipush(R1,R2,R6);
@@ -79,20 +93,6 @@ if(functionNum == 3) then
 	multipop(R1,R2,R6);
 	
 	[pcb + 4] = TERMINATED;
-
-	if ([PROCESS_TABLE+[SYSTEM_STATUS_TABLE+1]*16+9]!=9) then
-		R5=0;
-		while (R5<16) do
-			if ([PROCESS_TABLE+R5*16+4]==WAIT_PROCESS && [PROCESS_TABLE+R5*16+5]==currentPID) then
-				[PROCESS_TABLE+R5*16+4]=READY;
-				[PROCESS_TABLE+R5*16+5]=-1;
-			endif;
-			if([PROCESS_TABLE+R5*16+2]==currentPID) then
-				[PROCESS_TABLE+R5*16+2]=-1;
-			endif;
-			R5=R5+1;
-		endwhile;
-	endif;
 
 	return;
 endif;
